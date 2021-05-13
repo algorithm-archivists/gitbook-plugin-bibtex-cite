@@ -13,22 +13,18 @@ module.exports = {
       const citation = _.find(this.config.get('bib'), {
         citationKey: key.toUpperCase()
       })
-      if (citation !== undefined) {
-        if (!citation.used) {
-          citation.used = true
-          this.config.set('bibCount', this.config.get('bibCount') + 1)
-          citation.number = this.config.get('bibCount')
-        }
-        return (
-          '<a href="#cite-' +
-          citation.number +
-          '">[' +
-          citation.number +
-          ']</a>'
-        )
-      } else {
+
+      if (_.isNil(citation)) {
         return '[Citation not found]'
       }
+
+      if (!citation.used) {
+        citation.used = true
+        this.config.set('bibCount', this.config.get('bibCount') + 1)
+        citation.number = this.config.get('bibCount')
+      }
+
+      return `<a href="#cite-${citation.number}">[${citation.number}]</a>`
     }
   },
 
@@ -42,6 +38,11 @@ module.exports = {
 
   blocks: {
     references: {
+      /**
+       * Process the generation of the references list.
+       *
+       * @return {string}
+       */
       process: function () {
         const usedBib = _.filter(this.config.get('bib'), 'used')
         const sortedBib = _.sortBy(usedBib, 'number')
@@ -49,21 +50,30 @@ module.exports = {
         // start references
         let result = '<div class="references">'
 
-        for (const { number, entryTags } of sortedBib) {
-          const { AUTHOR, TITLE, URL, BOOKTITLE, BOOKURL, PUBLISHER, YEAR } = entryTags
+        for (const {number, entryTags} of sortedBib) {
+          const {AUTHOR, TITLE, URL, BOOKTITLE, BOOKURL, PUBLISHER, YEAR} = entryTags
 
-          const options = [
-            { value: AUTHOR ? formatAuthors(AUTHOR) : null },
-            { value: TITLE, url: URL },
-            { value: BOOKTITLE, url: BOOKURL, wrapper: 'i' },
-            { value: PUBLISHER, wrapper: 'i' },
-            { value: YEAR }
+          // The list of reference items to be processed in order of execution. if a value
+          // of the item is null or undefined, then it is filtered out otherwise it follows
+          // these rules.
+          //
+          // 1. If it has a URL return the value wrapped in a anchor tag with the URL as the href.
+          // 2. If it has a wrapper, return the value wrapped in the wrapper, e.g i or div, etc.
+          // 3. or return the value.
+          const referenceItems = [
+            {value: AUTHOR ? formatAuthors(AUTHOR) : null},
+            {value: TITLE, url: URL},
+            {value: BOOKTITLE, url: BOOKURL, wrapper: 'i'},
+            {value: PUBLISHER, wrapper: 'i'},
+            {value: YEAR}
           ]
 
-          const optionResult = options.filter(e => !_.isNil(e.value)).map((option) => {
-            if (!_.isNil(option.url)) return `<a href="${option.url}">${option.value}</a>`.trim()
-            if (!_.isNil(option.wrapper)) return `<${option.wrapper}>${option.value}</${option.wrapper}>`.trim()
-            return `${option.value}`.trim()
+          const optionResult = referenceItems.filter(e => !_.isNil(e.value)).map((option) => {
+            const visibleValue = option.value.toString().trim()
+
+            if (!_.isNil(option.url)) return `<a href="${option.url}">${visibleValue}</a>`
+            if (!_.isNil(option.wrapper)) return `<${option.wrapper}>${visibleValue}</${option.wrapper}>`
+            return `${visibleValue}`
           })
 
           result += '<div class="citation">'
@@ -81,12 +91,17 @@ module.exports = {
   }
 }
 
-function formatAuthors (authorsString) {
+/**
+ * Format the authors list based on the number of authors.
+ * If the total authors is greater than 3, use the first author with a postfix of et al.
+ *
+ * @param {string} authorsString
+ * @return {string}
+ */
+function formatAuthors(authorsString) {
   const authors = authorsString.split('and')
 
-  if (authors.length > 3) {
-    return authors[0] + ' <i>et al.</i>'
-  } else {
-    return authorsString
-  }
+  return authors.length > 3
+    ? `${authors[0]} <i>et al.</i>`
+    : authorsString
 }
